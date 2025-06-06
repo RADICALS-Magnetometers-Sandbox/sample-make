@@ -34,6 +34,7 @@ void echo(const char *device) {
             fprintf(stderr, "sci read: %s\n", strerror(errno));
             return;
         }
+        buf[len] = 0;
         comm->write(fd, buf, len);
     }
 }
