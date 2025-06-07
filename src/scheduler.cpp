@@ -1,8 +1,11 @@
 #include <chrono>
 #include <thread>
+#include <future>
 
 #include "scheduler.h"
 #include "comm.h"
+
+using namespace std::chrono_literals;
 
 extern int create_udp_listener(int);
 
@@ -10,16 +13,16 @@ static Comm *comm = 0;
 
 #define PORT 50000
 
-void timer() {
-    using namespace std::chrono_literals;
+int timer() {
 
     while (1) {
         std::this_thread::sleep_for(1000ms);
         fprintf(stderr, "*");
     }
+    return 0;
 }
 
-void echo(const char *device) {
+int echo(const char *device) {
     uint8_t buf[128];
     int fd = comm->open(device);
     fprintf(stderr, "device %s fd %d\n", device, fd);
@@ -28,15 +31,15 @@ void echo(const char *device) {
         int len = comm->read(fd, buf, 128);
         if (len <= 0) {
             if (len == 0) {
-                return;
+                return -1;
             }
             
             fprintf(stderr, "sci read: %s\n", strerror(errno));
-            return;
+            return -2;
         }
-        buf[len] = 0;
         comm->write(fd, buf, len);
     }
+    return 0;
 }
 
 static Scheduler scheduler;
@@ -55,10 +58,9 @@ int main() {
 
     comm = new Comm(sockfd);
 
-    std::thread sys_timer(timer);
-    std::thread sci_driver(echo, "console");
-    std::thread udp_driver(echo, "udp");
-    //std::thread udp_driver(udp_input, sockfd);
+    std::future<int> t = std::async(std::launch::async, timer);
+    std::future<int> c = std::async(std::launch::async, echo, "console");
+    std::future<int> u = std::async(std::launch::async, echo, "udp");
 
 #if 0
     // Start the tasks
@@ -71,11 +73,9 @@ int main() {
     periodic_task->start(periodic_task);
 #endif
 
-    udp_driver.join();
-    fprintf(stderr, "udp input closed\n");
-    sci_driver.join();
-    fprintf(stderr, "sci input closed\n");
-    sys_timer.join();
+    int rc = t.get();
+    rc = c.get();
+    rc = u.get();
     return 0;
 }
 
